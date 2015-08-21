@@ -19,12 +19,14 @@ class Payload:
         self.extension = "go"
         self.rating = "Normal"
         self.description = "Go VirtualAlloc method for inline shellcode injection"
-        self.required_options = {"compile_to_exe" : ["Y", "Compile to an executable"]}
+        self.required_options = {
+                                    "COMPILE_TO_EXE" : ["Y", "Compile to an executable"]
+                                }
 
         self.shellcode = shellcode.Shellcode()
 
     def generate(self):
-        Shellcode = self.shellcode.generate()
+        Shellcode = self.shellcode.generate(self.required_options)
         # randomly generate out variable names
         memCommit = helpers.randomString()
         memReserve = helpers.randomString()
@@ -35,7 +37,7 @@ class Payload:
         size = helpers.randomString()
         addr = helpers.randomString()
         err = helpers.randomString()
-        sc = helpers.randomString() 
+        sc = helpers.randomString()
         buff = helpers.randomString()
         value = helpers.randomString()
 

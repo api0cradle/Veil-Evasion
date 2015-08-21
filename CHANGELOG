@@ -1,3 +1,21 @@
+[07.11.2015]
+     Released.: 2.21.4
+     Updated..: Addressed issue #189, where powershell payloads essentially ignore the compile option since it doesn't apply to them.
+     Updated..: Addressed issue #188, really just expanded upon g0tmilk's PR to give context to the error message.
+
+[7.01.2015]
+     Released.: 2.21.3
+     Fixed....: Fixed a bug in controller so it no longer ignores the "compile_to_exe" option.
+
+[6.27.2015]
+     Released.: 2.21.2
+     Modified.: Removed references to msfpayload throughout veil-evasion
+
+[6.24.2015]
+     Released.: 2.21.1
+     Modified.: RPC server now accepts the pwnstaller and doesn't crash (thanks to PR #171)
+     Updated..: Hyperion was updated to version 1.2, thanks to PR #172
+
 [6.15.2015]
      Released.: 2.21.0
      Modified.: June V-Day released! https://www.veil-framework.com/june-2015-v-day/
