@@ -185,7 +185,7 @@ class Shellcode:
         if options:
             for option in options:
                 self.msfvenomCommand += " " + option + " "
-        self.msfvenomCommand += " -b \'\\x00\\x0a\\xff\' -e x86/call4_dword_xor -f c | tr -d \'\"\' | tr -d \'\n\'"
+        self.msfvenomCommand += " -f c | tr -d \'\"\' | tr -d \'\\n\'"
 
         # set the internal msfvenompayload to this payload
         self.msfvenompayload = payload
@@ -436,13 +436,17 @@ class Shellcode:
                 while True:
                     # clear out the tab completion
                     readline.set_completer(completers.none().complete)
-                    selection = raw_input(' [>] Enter any extra msfvenom options (syntax: OPTION1=value1 OPTION2=value2): ').strip()
+                    selection = raw_input(' [>] Enter any extra msfvenom options (syntax: OPTION1=value1 or -OPTION2=value2): ').strip()
                     if selection != "":
                         num_extra_options = selection.split(' ')
                         for xtra_opt in num_extra_options:
                             if xtra_opt is not '':
-                                final_opt = xtra_opt.split('=')[0] + " " + xtra_opt.split('=')[1]
-                                extraValues.append(final_opt)
+                                if "-" in xtra_opt.split('=')[0]:
+                                    final_opt = xtra_opt.split('=')[0] + " " + xtra_opt.split('=')[1]
+                                    extraValues.append(final_opt)
+                                else:
+                                    final_opt = xtra_opt.split('=')[0] + "=" + xtra_opt.split('=')[1]
+                                    extraValues.append(final_opt)
                     else:
                         break
 
@@ -459,8 +463,7 @@ class Shellcode:
                     self.options.append(option)
                 if len(extraValues) != 0 :
                     self.msfvenomCommand += " " +  " ".join(extraValues)
-                self.msfvenomCommand += " -b \'\\x00\\x0a\\xff\' -f c | tr -d \'\"\' | tr -d \'\n\'"
-
+                self.msfvenomCommand += " -f c | tr -d \'\"\' | tr -d \'\\n\'"
 
     def generate(self, required_options=None):
         """
@@ -519,4 +522,3 @@ class Shellcode:
                 # on error, default to the new version
                 except:
                     return FuncShellcode[22:-1].strip()
-
